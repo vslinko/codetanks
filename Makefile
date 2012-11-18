@@ -9,7 +9,7 @@ prepare: clean
 	mv python3-cgdk/model python3-cgdk/RemoteProcessClient.py python3-cgdk/Runner.py .
 	rm -r python3-cgdk*
 
-	wget -O local-runner.zip "http://russianaicup.ru/s/1352893564231/assets/local-runner/local-runner.zip?rnd"
+	wget -O local-runner.zip "http://russianaicup.ru/s/1353255447252/assets/local-runner/local-runner.zip?rnd"
 	mkdir local-runner
 	cd local-runner && unzip ../local-runner.zip
 	chmod a+x ./local-runner/*.sh
