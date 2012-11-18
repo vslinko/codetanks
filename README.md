@@ -23,5 +23,4 @@ make build
 ## Known problems
 
 * Shared resources between team members
-* Ignoring obstacles in attack
 * Hiding from shells ignores free space

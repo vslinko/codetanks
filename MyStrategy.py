@@ -9,6 +9,7 @@ ATTACK_ANGLE = math.pi / 180 # 1 degree
 COMING_SHELL_ANGLE = math.pi / 6 # 30 degrees
 PERPENDICULAR_ANGLE = math.pi / 2 # 90 degrees
 PERPENDICULAR_ANGLE_MARGIN = math.pi / 9 # 20 degrees
+OBSTACLE_ANGLE = math.pi / 18 # 10 degrees
 MOVE_ANGLE = math.pi / 9 # 20 degrees
 CREW_HEALTH_PANIC = .75
 HULL_DURABILITY_PANIC = .5
@@ -75,10 +76,11 @@ def get_by_id(units, id):
     return filtered_units[0] if len(filtered_units) == 1 else None
 
 
-def attack(me, unit, move):
+def attack(me, unit, possible_obstacles, move):
     """
     :type me: model.Tank.Tank
     :type unit: model.Unit.Unit
+    :type possible_obstacles: list of model.Unit.Unit
     :type move: model.Move.Move
     """
 
@@ -110,11 +112,16 @@ def attack(me, unit, move):
     angle_deviation = attack_angle_deviation(distance, enemy_speed, shell_speed, gamma)
     angle = me.get_turret_angle_to_unit(unit) + angle_deviation
 
+    left_margin = angle - OBSTACLE_ANGLE
+    right_margin = angle + OBSTACLE_ANGLE
+    nearest_possible_obstacles = [o for o in possible_obstacles if me.get_distance_to_unit(o) < distance]
+    obstacles = [o for o in nearest_possible_obstacles if left_margin < me.get_turret_angle_to_unit(o) < right_margin]
+
     if angle > ATTACK_ANGLE:
         move.turret_turn = 1
     elif angle < -ATTACK_ANGLE:
         move.turret_turn = -1
-    else:
+    elif not obstacles:
         move.fire_type = FireType.PREMIUM_PREFERRED
 
 
@@ -215,6 +222,7 @@ class MyStrategy(object):
         enemies = [t for t in world.tanks if enemy(t)]
         attacking_enemies = [e for e in enemies if probably_attacking(e, me)]
         remembered_enemy = get_by_id(attacking_enemies, self.tank_id)
+        possible_obstacles = [t for t in world.tanks if t.teammate or t.crew_health == 0] + world.bonuses
         coming_shells = [s for s in world.shells if coming_shell(me, s)]
         nearest_coming_shell = nearest(me, coming_shells)
         med_kits = [b for b in world.bonuses if b.type == BonusType.MEDIKIT]
@@ -235,7 +243,7 @@ class MyStrategy(object):
         else:
             target = min(enemies, key=lambda e: me.get_turret_angle_to_unit(e))
 
-        attack(me, target, move)
+        attack(me, target, possible_obstacles, move)
 
         if me.crew_health < me.crew_max_health * CREW_HEALTH_PANIC and nearest_med_kit:
             follow(me, nearest_med_kit, move)
