@@ -71,7 +71,34 @@ def attack(me, unit, move):
     :type unit: model.Unit.Unit
     :type move: model.Move.Move
     """
-    angle = me.get_turret_angle_to_unit(unit)
+
+    def attack_angle_deviation(distance, enemy_speed, shell_speed, gamma):
+        """
+        :param distance: Distance between me and enemy
+        :type distance: float
+        :param enemy_speed: Enemy speed
+        :type enemy_speed: float
+        :param shell_speed: Shell speed
+        :type shell_speed: float
+        :param gamma: Angle between enemy path and me
+        :type gamma: float
+        """
+        if gamma == 0 or gamma == math.pi or enemy_speed == 0:
+            return 0
+
+        b = distance
+        a = enemy_speed * distance / shell_speed
+        c = math.sqrt(math.pow(a, 2) + math.pow(b, 2) - 2 * a * b * math.cos(gamma))
+        alpha = math.acos(round((math.pow(b, 2) + math.pow(c, 2) - math.pow(a, 2)) / (2 * b * c), 10))
+
+        return -alpha if (gamma < 0) != (enemy_speed < 0) else alpha
+
+    distance = me.get_distance_to_unit(unit)
+    enemy_speed = math.sqrt(math.pow(unit.speedX, 2) + math.pow(unit.speedY, 2))
+    shell_speed = 13 if me.premium_shell_count > 0 else 15
+    gamma = unit.get_angle_to_unit(me)
+    angle_deviation = attack_angle_deviation(distance, enemy_speed, shell_speed, gamma)
+    angle = me.get_turret_angle_to_unit(unit) + angle_deviation
 
     if angle > ATTACK_ANGLE:
         move.turret_turn = 1
