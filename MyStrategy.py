@@ -65,6 +65,16 @@ def nearest(me, units):
     return min(units, key=lambda u: me.get_distance_to_unit(u))
 
 
+def get_by_id(units, id):
+    """
+    :type units: list of model.Unit.Unit
+    :param id: int
+    """
+    filtered_units = [u for u in units if u.id == id]
+
+    return filtered_units[0] if len(filtered_units) == 1 else None
+
+
 def attack(me, unit, move):
     """
     :type me: model.Tank.Tank
@@ -194,6 +204,8 @@ def turn_perpendicular(me, units, move):
 
 
 class MyStrategy(object):
+    tank_id = None
+
     def move(self, me, world, move):
         """
         :type me: model.Tank.Tank
@@ -202,6 +214,7 @@ class MyStrategy(object):
         """
         enemies = [t for t in world.tanks if enemy(t)]
         attacking_enemies = [e for e in enemies if probably_attacking(e, me)]
+        remembered_enemy = get_by_id(attacking_enemies, self.tank_id)
         coming_shells = [s for s in world.shells if coming_shell(me, s)]
         nearest_coming_shell = nearest(me, coming_shells)
         med_kits = [b for b in world.bonuses if b.type == BonusType.MEDIKIT]
@@ -214,8 +227,11 @@ class MyStrategy(object):
         closing_to_my_way_bonuses = [b for b in world.bonuses if closing_to_my_way(me, b)]
         nearest_closing_to_my_way_bonus = nearest(me, closing_to_my_way_bonuses)
 
-        if attacking_enemies:
+        if remembered_enemy:
+            target = remembered_enemy
+        elif attacking_enemies:
             target = min(attacking_enemies, key=lambda e: e.crew_health)
+            self.tank_id = target.id
         else:
             target = min(enemies, key=lambda e: me.get_turret_angle_to_unit(e))
 
