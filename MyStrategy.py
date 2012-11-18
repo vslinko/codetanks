@@ -19,7 +19,7 @@ def enemy(tank):
     """
     :type tank: model.Tank.Tank
     """
-    return not tank.teammate and tank.crew_health > 0
+    return not tank.teammate and tank.crew_health > 0 and tank.hull_durability > 0
 
 
 def probably_attacking(tank, unit):
