@@ -1,4 +1,6 @@
 import math
+import tkinter
+import os
 import functools
 from model.BonusType import BonusType
 from model.FireType import FireType
@@ -13,6 +15,49 @@ OBSTACLE_ANGLE = math.pi / 18 # 10 degrees
 MOVE_ANGLE = math.pi / 9 # 20 degrees
 CREW_HEALTH_PANIC = .75
 HULL_DURABILITY_PANIC = .5
+
+
+class FakeDebug(object):
+    def point(self, x, y, fill):
+        pass
+
+    def polygon(self, coordinates, fill="black"):
+        pass
+
+    def render(self):
+        pass
+
+
+class Debug(FakeDebug):
+    SCALE = .35
+    POINT_RADIUS = 20
+
+    def __init__(self):
+        width = 1280 * self.SCALE
+        height = 800 * self.SCALE
+
+        self.root = tkinter.Tk()
+        self.canvas = tkinter.Canvas(self.root, width=width, height=height)
+        self.canvas.pack()
+        self.root.update()
+        self.root.geometry('%dx%d+%d+%d' % (width, height, self.root.winfo_screenwidth() - width, 0))
+
+    def point(self, x, y, fill):
+        x1 = (x - self.POINT_RADIUS) * self.SCALE
+        y1 = (y - self.POINT_RADIUS) * self.SCALE
+        x2 = (x + self.POINT_RADIUS) * self.SCALE
+        y2 = (y + self.POINT_RADIUS) * self.SCALE
+        self.canvas.create_oval((x1, y1, x2, y2), fill=fill, tags="object")
+
+    def polygon(self, coordinates, fill="black"):
+        coordinates = [(c[0] * self.SCALE, c[1] * self.SCALE) for c in coordinates]
+        self.canvas.create_polygon(coordinates, fill=fill, tags="object")
+
+    def render(self):
+        self.root.update()
+        self.canvas.delete("object")
+
+debug_screen = Debug() if os.getenv("CODETANKS_DEBUG_SCREEN") else FakeDebug()
 
 
 def enemy(tank):
@@ -38,6 +83,13 @@ def coming_shell(me, shell):
     return -COMING_SHELL_ANGLE < shell.get_angle_to_unit(me) < COMING_SHELL_ANGLE
 
 
+def possible_obstacle(tank):
+    """
+    :type tank: model.Tank.Tank
+    """
+    return tank.teammate or tank.crew_health == 0 or tank.hull_durability == 0
+
+
 def closing_to_my_way(me, unit):
     """
     :type me: model.Tank.Tank
@@ -52,6 +104,40 @@ def closing_to_my_way(me, unit):
     if me.get_distance_to_unit(unit) < me.height * 5:
         return True
 
+    return False
+
+
+def lines_intersection(line1, line2):
+    """
+    :param line1: First line, for example ((1, 1), (2, 2))
+    :type line1: tuple
+    :param line2: Second line, for example ((1, 2), (2, 1))
+    :type line2: tuple
+    """
+
+    def intersection(ax1, ay1, ax2, ay2, bx1, by1, bx2, by2):
+        """
+        :type ax1: float
+        :type ay1: float
+        :type ax2: float
+        :type ay2: float
+        :type bx1: float
+        :type by1: float
+        :type bx2: float
+        :type by2: float
+        """
+        v1 = (bx2 - bx1) * (ay1 - by1) - (by2 - by1) * (ax1 - bx1)
+        v2 = (bx2 - bx1) * (ay2 - by1) - (by2 - by1) * (ax2 - bx1)
+        v3 = (ax2 - ax1) * (by1 - ay1) - (ay2 - ay1) * (bx1 - ax1)
+        v4 = (ax2 - ax1) * (by2 - ay1) - (ay2 - ay1) * (bx2 - ax1)
+
+        return v1 * v2 < 0 and v3 * v4 < 0
+
+    return intersection(line1[0][0], line1[0][1], line1[1][0], line1[1][1],
+        line2[0][0], line2[0][1], line2[1][0], line2[1][1])
+
+
+def has_obstacles(line, possible_obstacles):
     return False
 
 
@@ -83,45 +169,24 @@ def attack(me, unit, possible_obstacles, move):
     :type possible_obstacles: list of model.Unit.Unit
     :type move: model.Move.Move
     """
-
-    def attack_angle_deviation(distance, enemy_speed, shell_speed, gamma):
-        """
-        :param distance: Distance between me and enemy
-        :type distance: float
-        :param enemy_speed: Enemy speed
-        :type enemy_speed: float
-        :param shell_speed: Shell speed
-        :type shell_speed: float
-        :param gamma: Angle between enemy path and me
-        :type gamma: float
-        """
-        if gamma == 0 or gamma == math.pi or enemy_speed == 0:
-            return 0
-
-        b = distance
-        a = enemy_speed * distance / shell_speed
-        c = math.sqrt(math.pow(a, 2) + math.pow(b, 2) - 2 * a * b * math.cos(gamma))
-        alpha = math.acos(round((math.pow(b, 2) + math.pow(c, 2) - math.pow(a, 2)) / (2 * b * c), 10))
-
-        return -alpha if (gamma < 0) != (enemy_speed < 0) else alpha
-
     distance = me.get_distance_to_unit(unit)
-    enemy_speed = math.sqrt(math.pow(unit.speedX, 2) + math.pow(unit.speedY, 2))
     shell_speed = 13 if me.premium_shell_count > 0 else 15
-    gamma = unit.get_angle_to_unit(me)
-    angle_deviation = attack_angle_deviation(distance, enemy_speed, shell_speed, gamma)
-    angle = me.get_turret_angle_to_unit(unit) + angle_deviation
+    enemy_speed = math.sqrt(math.pow(unit.speedX, 2) + math.pow(unit.speedY, 2))
+    enemy_path = enemy_speed * distance / shell_speed
+    Cx = unit.x + enemy_path * math.cos(unit.angle)
+    Cy = unit.y + enemy_path * math.sin(unit.angle)
 
-    left_margin = angle - OBSTACLE_ANGLE
-    right_margin = angle + OBSTACLE_ANGLE
-    nearest_possible_obstacles = [o for o in possible_obstacles if me.get_distance_to_unit(o) < distance]
-    obstacles = [o for o in nearest_possible_obstacles if left_margin < me.get_turret_angle_to_unit(o) < right_margin]
+    debug_screen.point(me.x, me.y, "red")
+    debug_screen.point(unit.x, unit.y, "blue")
+    debug_screen.polygon([(me.x, me.y), (unit.x, unit.y), (Cx, Cy)])
+
+    angle = me.get_turret_angle_to(Cx, Cy)
 
     if angle > ATTACK_ANGLE:
         move.turret_turn = 1
     elif angle < -ATTACK_ANGLE:
         move.turret_turn = -1
-    elif not obstacles:
+    elif not has_obstacles(((me.x, me.y), (Cx, Cy)), possible_obstacles):
         move.fire_type = FireType.PREMIUM_PREFERRED
 
 
@@ -222,7 +287,7 @@ class MyStrategy(object):
         enemies = [t for t in world.tanks if enemy(t)]
         attacking_enemies = [e for e in enemies if probably_attacking(e, me)]
         remembered_enemy = get_by_id(attacking_enemies, self.tank_id)
-        possible_obstacles = [t for t in world.tanks if t.teammate or t.crew_health == 0] + world.bonuses
+        possible_obstacles = [t for t in world.tanks if possible_obstacle(t)] + world.obstacles + world.bonuses
         coming_shells = [s for s in world.shells if coming_shell(me, s)]
         nearest_coming_shell = nearest(me, coming_shells)
         med_kits = [b for b in world.bonuses if b.type == BonusType.MEDIKIT]
@@ -257,6 +322,8 @@ class MyStrategy(object):
             follow(me, nearest_closing_to_my_way_bonus, move)
         else:
             pass
+
+        debug_screen.render()
 
     def select_tank(self, tank_index, team_size):
         """

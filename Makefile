@@ -1,7 +1,7 @@
 run:
 	cd local-runner && ./local-runner-sync.sh
 	sleep 2
-	python3 Runner.py
+	CODETANKS_DEBUG_SCREEN=1 python3 Runner.py
 
 prepare: clean
 	wget -O python3-cgdk.zip "http://russianaicup.ru/s/1353065883304/assets/cgdks/python3-cgdk.zip?rnd"
